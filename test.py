@@ -5,7 +5,7 @@ import time
 import re
 
 class SmsCat:
-  def __init__(self, port, sms_center = ''):
+  def __init__(self, port):
     self.sp = serial.Serial()
     self.sp.port = port
     self.sp.baudrate = 115200
@@ -13,7 +13,6 @@ class SmsCat:
     self.sp.stopbit = serial.STOPBITS_ONE
     self.sp.bytesize = serial.EIGHTBITS
     self.sp.timeout = 2
-    self.sms_center = SmsCat.ucs2_phone(sms_center)
    
   def open(self):
     self.sp.open()
@@ -70,22 +69,21 @@ class SmsCat:
     return '{:02x}'.format(len(s) / 2) + s 
 
   def send_sms_pdu(self, phone_number, text):
-#    pdu = "0891{0}".format(self.sms_center)
-    pdu = "00"
-    s = "11000D91{0}000800{1}".format(SmsCat.ucs2_phone(phone_number), SmsCat.msg(text))
-    print len(s) / 2, pdu + s
-    self.sp.write("AT+CMGS=%02d\r" % (len(s) / 2))
+    header = "00"      # use the on sim sms center 
+    pdu = "11000D91{0}000800{1}".format(SmsCat.ucs2_phone(phone_number), SmsCat.msg(text))
+    print len(pdu) / 2, header + pdu
+    self.sp.write("AT+CMGS=%02d\r" % (len(pdu) / 2))
     self.sp.flush()
     self.sp.readline()
-    self.sp.write(pdu + s)
+    self.sp.write(header + pdu)
     self.sp.write('%c' % 0x1a)
     self.sp.flush()
     while True:
       s = self.sp.readline().strip()
       if s:
         print '<', s
-      if s == 'OK':
-        break
+        if s == 'OK' or s == 'ERROR' :
+          break
 
   def read_sms_text(self, index):
     recv = self.transmit("AT+CMGR=%d" % index)
@@ -128,7 +126,7 @@ class SmsCat:
 
    
 if __name__ == '__main__':
-  sms = SmsCat('/dev/ttyS0', '13800591500')
+  sms = SmsCat('/dev/ttyS0')
   sms.open()
 #  sms.transmit('AT+CSCA?')
 #  sms.transmit('AT')
