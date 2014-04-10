@@ -3,6 +3,9 @@
 import serial
 import time
 import re
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 class SmsCat:
   def __init__(self, port):
@@ -13,26 +16,27 @@ class SmsCat:
     self.sp.stopbit = serial.STOPBITS_ONE
     self.sp.bytesize = serial.EIGHTBITS
     self.sp.timeout = 2
+    self.format = 0
    
   def open(self):
     self.sp.open()
-   
-  def transmit(self, content):
-    print '>', content
-    self.sp.write(content + '\r')
-    self.sp.flush()
+
+  def getResponse(self):
     recv = []
     while True:
       s = self.sp.readline().strip()
       if s:
-        print '<', s
-
+        logging.info('< %s' % s)
         if s == 'OK' or s == 'ERROR':
           break
-        else:
-          recv.append(s)
 
     return recv
+  
+  def transmit(self, content):
+    logging.info('> %s' % content)
+    self.sp.write(content + '\r')
+    self.sp.flush()
+    return self.getResponse()
 
   def send_sms_text(self, phone_number, text):
     self.sp.write("AT+CMGS=%s\r" % phone_number)
@@ -41,12 +45,7 @@ class SmsCat:
     self.sp.write(text)
     self.sp.write('%c' % 0x1a)
     self.sp.flush()
-    while True:
-      s = self.sp.readline().strip()
-      if s:
-        print '<', s
-      if s == 'OK' or s == 'ERROR':
-        break
+    return self.getResponse()
 
   def close(self):
     self.sp.close()
@@ -78,12 +77,7 @@ class SmsCat:
     self.sp.write(header + pdu)
     self.sp.write('%c' % 0x1a)
     self.sp.flush()
-    while True:
-      s = self.sp.readline().strip()
-      if s:
-        print '<', s
-        if s == 'OK' or s == 'ERROR' :
-          break
+    return self.getResponse()
 
   def read_sms_text(self, index):
     recv = self.transmit("AT+CMGR=%d" % index)
@@ -141,7 +135,7 @@ if __name__ == '__main__':
 #  print SmsCat.ucs2("13800591500")
 #  print SmsCat.msg(u'你好')
 #  print SmsCat.msg(u'你好000')
-  sms.send_sms_pdu("13665036099", u'你好啊！')
+  sms.send_sms_pdu("13665036099", u'你好啊！什么情况？')
 #  sms.send_pdu_text("13605945341", u'341341341234才文，来帮我接亲啊~ weihong.guan@gmail.com, 13665036099')
   
 #  for i in range(1, 40):
