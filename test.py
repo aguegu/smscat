@@ -16,10 +16,24 @@ class SmsCat:
     self.sp.stopbit = serial.STOPBITS_ONE
     self.sp.bytesize = serial.EIGHTBITS
     self.sp.timeout = 2
-    self.format = 0
-   
-  def open(self):
+
+    assert not self.sp.isOpen()
+    
     self.sp.open()
+    while True:
+      r = self.transmit('AT')
+      if len(r) == 1 and r[0] == 'OK':
+        break
+   
+    r = self.transmit('AT+CMGF?')
+    self.cmgf = int(r[0][-1])
+
+  # 0: PDU; 1: TEXT
+  def set_cmgf(self, cmgf):
+    assert cmgf in (0, 1)
+    if cmgf != self.cmgf:
+      sms.transmit('AT+CMGF=%d' % cmgf)
+      self.cmgf = cmgf
 
   def getResponse(self):
     recv = []
@@ -27,6 +41,7 @@ class SmsCat:
       s = self.sp.readline().strip()
       if s:
         logging.info('< %s' % s)
+        recv.append(s)
         if s == 'OK' or s == 'ERROR':
           break
 
@@ -39,6 +54,7 @@ class SmsCat:
     return self.getResponse()
 
   def send_sms_text(self, phone_number, text):
+    self.set_cmgf(1)
     self.sp.write("AT+CMGS=%s\r" % phone_number)
     self.sp.flush()
     self.sp.read(4)
@@ -68,9 +84,10 @@ class SmsCat:
     return '{:02x}'.format(len(s) / 2) + s 
 
   def send_sms_pdu(self, phone_number, text):
+    self.set_cmgf(0)
     header = "00"      # use the on sim sms center 
     pdu = "11000D91{0}000800{1}".format(SmsCat.ucs2_phone(phone_number), SmsCat.msg(text))
-    print len(pdu) / 2, header + pdu
+    logging.info('%d %s' % (len(pdu) / 2, header + pdu))
     self.sp.write("AT+CMGS=%02d\r" % (len(pdu) / 2))
     self.sp.flush()
     self.sp.readline()
@@ -80,6 +97,7 @@ class SmsCat:
     return self.getResponse()
 
   def read_sms_text(self, index):
+    self.set_cmgf(1)
     recv = self.transmit("AT+CMGR=%d" % index)
     if len(recv) and recv[0].find('"') != -1:
       d = dict(zip(['status', 'source', 'sent_on'], re.findall(r'\"([^\"]+)\"', recv[0])))
@@ -96,8 +114,13 @@ class SmsCat:
       print d['content']
 
   def read_sms_pdu(self, index):
+    self.set_cmgf(0)
+
+    recv = self.transmit("AT+CMGR=%d" % index)
+    print recv
+'''
     center = '683108501905F0'
-    center = ''.join(sum(zip(center[1::2], center[::2]),()))        
+    center = SmsCat.ucs2(center)
     if center[-1] == 'F':
       center = center[:-1]
     
@@ -115,31 +138,15 @@ class SmsCat:
       r += c
 
     print r
-    
-  
-
-   
+'''   
 if __name__ == '__main__':
   sms = SmsCat('/dev/ttyS0')
-  sms.open()
-#  sms.transmit('AT+CSCA?')
-#  sms.transmit('AT')
-  sms.transmit('AT+CMGF=0')
-  sms.transmit('AT+CMGF?')
 #  sms.send_sms_text('13665036099', 'hello, world, again.')
-#  sms.send_sms_text('13665036099', '9876543210' * 16)
-#  sms.send_gsm_text('15959159137', 'hello, world, again and again, too.')
-#  sms.transmit('AT+CGMR')
+#  sms.send_sms_pdu("13665036099", u'你好啊！什么情况？^_^')
 #  sms.transmit('AT+IPR')
-#  sms.close()
-#  print SmsCat.ucs2("13800591500")
-#  print SmsCat.msg(u'你好')
-#  print SmsCat.msg(u'你好000')
-  sms.send_sms_pdu("13665036099", u'你好啊！什么情况？')
-#  sms.send_pdu_text("13605945341", u'341341341234才文，来帮我接亲啊~ weihong.guan@gmail.com, 13665036099')
   
-#  for i in range(1, 40):
-#    sms.read_sms(i)
-  sms.read_sms_pdu(0)
+  for i in range(1, 40):
+    sms.read_sms_pdu(i)
+    #sms.read_sms_text(i)
 
-
+  sms.close()
