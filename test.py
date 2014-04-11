@@ -85,7 +85,9 @@ class SmsCat:
 
   def send_sms_pdu(self, phone_number, text):
     self.set_cmgf(0)
-    header = "00"      # use the on sim sms center 
+#    header = "00"      # use the on sim sms center 
+    header = '0891{0}'.format(SmsCat.ucs2_phone('13800591500'))
+#    header = '07A1{0}'.format(SmsCat.ucs2('13800591500F'))
     pdu = "11000D91{0}000800{1}".format(SmsCat.ucs2_phone(phone_number), SmsCat.msg(text))
     logging.info('%d %s' % (len(pdu) / 2, header + pdu))
     self.sp.write("AT+CMGS=%02d\r" % (len(pdu) / 2))
@@ -117,36 +119,47 @@ class SmsCat:
     self.set_cmgf(0)
 
     recv = self.transmit("AT+CMGR=%d" % index)
-    print recv
-'''
-    center = '683108501905F0'
-    center = SmsCat.ucs2(center)
-    if center[-1] == 'F':
-      center = center[:-1]
-    
-    print center
-    
-    s = '39DCCD56A3CD6431580E77B3D56833590C96C3DD6C35DA4C1683E570375B8D3693C56039DCCD56A3CD6431580E77B3D56833590C96C3DD6C35DA4C1683E570375B8D3693C56039DCCD56A3CD6431580E77B3D56833590C96C3DD6C35DA4C1683E570375B8D3693C56039DCCD56A3CD6431580E77B3D56833590C96C3DD6C35DA4C1683E570375B8D3693C560'
-    s = ''.join((re.findall(r'..', s)[::-1]))
-    
-    r = ''
-    
-    d = int(s, 16)
-    while d:
-      c = chr(d & 0x7f)
-      d >>= 7
-      r += c
+    if len(recv) != 3:
+      return
 
-    print r
-'''   
+    d = {}
+    pdu = recv[1]
+    
+    center_length = int(pdu[:2], 16) * 2
+    d['center'] = SmsCat.ucs2(pdu[4:(center_length + 2)])[:-1]
+    source_length =(int(pdu[center_length + 4:][:2], 16) + 1) / 2 * 2
+    d['source'] = SmsCat.ucs2(pdu[center_length + 8:][:source_length])
+    d['encoding'] = pdu[center_length + 10 + source_length:][:2]
+    d['send_on'] = SmsCat.ucs2(pdu[center_length + source_length + 12:][:14])
+    content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) * 2:]
+    
+    if d['encoding'] == '08':
+      d['content'] = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', content))
+    elif d['encoding'] == '00':
+      content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) / 8 * 7 * 2:]
+      s = ''.join((re.findall(r'..', content)[::-1]))
+      r = ''
+      n = int(s, 16)
+      while n:
+        c = chr(n & 0x7f)
+        n >>= 7
+        r += c
+ 
+      d['content'] = r
+    elif d['encoding'] == '04':
+      d['content'] = '(MMS)'
+
+    print d
+    print d['content']
+
 if __name__ == '__main__':
   sms = SmsCat('/dev/ttyS0')
 #  sms.send_sms_text('13665036099', 'hello, world, again.')
-#  sms.send_sms_pdu("13665036099", u'你好啊！什么情况？^_^')
+#  sms.send_sms_pdu("13665036099", u'使用8字节国内短信中心发送到8位国际号码')
 #  sms.transmit('AT+IPR')
   
   for i in range(1, 40):
     sms.read_sms_pdu(i)
-    #sms.read_sms_text(i)
-
+#    #sms.read_sms_text(i)
+#
   sms.close()
