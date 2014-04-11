@@ -4,6 +4,7 @@ import serial
 import time
 import re
 import logging
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 
@@ -98,30 +99,37 @@ class SmsCat:
     self.sp.flush()
     return self.getResponse()
 
-  def decode_pdu(self, pdu, d):
-    d['pdu'] = pdu
-    if d['pdu'][:6] == '050003':
-      d['group'] = d['pdu'][6:][:2]
-      d['total'] = int(d['pdu'][8:][:2], 16)
-      d['index'] = int(d['pdu'][10:][:2], 16)
+  def decode_pdu(self, pdu):
+    if pdu[:6] == '050003':
+      group = pdu[6:][:2]
+      total = int(pdu[8:][:2], 16)
+      index = int(pdu[10:][:2], 16)
     
-      d['pdu'] = d['pdu'][12:]
+      pdu = pdu[12:]
 
-      s = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', d['pdu']))
-      d['content'] = "[%d/%d] <%s>: %s" % (d['index'], d['total'], d['group'], s)
-    elif d['pdu'][:6] == '060504':
-      d['content'] = '(MMS)'
+      s = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', pdu))
+      content = "[%d/%d] <%s>: %s" % (index, total, group, s)
+    elif pdu[:6] == '060504':
+      content = '(MMS)'
     else:
-      d['content'] = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', d['pdu']))
+      content = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', pdu))
+
+    return content
  
   def read_sms_text(self, index):
     self.set_cmgf(1)
     recv = self.transmit("AT+CMGR=%d" % index)
     if len(recv) and recv[0].find('"') != -1:
-      d = dict(zip(['status', 'source', 'sent_on'], re.findall(r'\"([^\"]+)\"', recv[0])))
-      self.decode_pdu(recv[1], d)
-       
-      print d['content']
+      d = dict(zip(['source', 'send_on'], re.findall(r'\"([^\"]+)\"', recv[0])[1:]))
+      if d['source'][:3] == '+86':
+        d['source'] = d['source'][3:]
+      if d['source'][-1] == 'F':
+        d['source'] = d['source'][:-1]
+      
+      d['id'] = index
+      d['send_on'] = datetime.strptime(d['send_on'][:-3], '%y/%m/%d,%H:%M:%S')
+      d['content'] = self.decode_pdu(recv[1])
+      return d
 
   def read_sms_pdu(self, index):
     self.set_cmgf(0)
@@ -134,16 +142,21 @@ class SmsCat:
     pdu = recv[1]
     
     center_length = int(pdu[:2], 16) * 2
-    d['center'] = SmsCat.ucs2(pdu[4:(center_length + 2)])[:-1]
+    d['id'] = index
+#    d['center'] = SmsCat.ucs2(pdu[4:(center_length + 2)])[:-1]
     source_length =(int(pdu[center_length + 4:][:2], 16) + 1) / 2 * 2
     d['source'] = SmsCat.ucs2(pdu[center_length + 8:][:source_length])
-    d['encoding'] = pdu[center_length + 10 + source_length:][:2]
-    d['send_on'] = SmsCat.ucs2(pdu[center_length + source_length + 12:][:14])
+    if d['source'][:2] == '86':
+      d['source'] = d['source'][2:]
+    
+    encoding = pdu[center_length + 10 + source_length:][:2]
+    d['send_on'] = datetime.strptime(SmsCat.ucs2(pdu[center_length + source_length + 12:][:12]), '%y%m%d%H%M%S')
+
     content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) * 2:]
     
-    if d['encoding'] == '08':
-      self.decode_pdu(content, d)
-    elif d['encoding'] == '00':
+    if encoding == '08':
+      d['content'] = self.decode_pdu(content)
+    elif encoding == '00':
       content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) / 8 * 7 * 2:]
       s = ''.join((re.findall(r'..', content)[::-1]))
       r = ''
@@ -153,11 +166,11 @@ class SmsCat:
         n >>= 7
         r += c
  
-      d['content'] = r
-    elif d['encoding'] == '04':
+      d['content'] = r  
+    elif encoding == '04':
       d['content'] = '(MMS)'
 
-    print d['content']
+    return d
 
 if __name__ == '__main__':
   sms = SmsCat('/dev/ttyS0')
@@ -165,8 +178,9 @@ if __name__ == '__main__':
 #  sms.send_sms_pdu("13665036099", u'使用8字节国内短信中心发送到8位国际号码')
 #  sms.transmit('AT+IPR')
   
-  for i in range(1, 40):
-    sms.read_sms_pdu(i)
-    sms.read_sms_text(i)
+  for i in range(25, 30):
+    d = sms.read_sms_pdu(i)
+    print d['content']
+    print sms.read_sms_text(i)
 
   sms.close()
