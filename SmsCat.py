@@ -100,21 +100,24 @@ class SmsCat:
     return self.getResponse()
 
   def decode_pdu(self, pdu):
+    mark = '00'
+    total = 1
+    pos = 1
+
     if pdu[:6] == '050003':
-      group = pdu[6:][:2]
+      mark = pdu[6:][:2]
       total = int(pdu[8:][:2], 16)
-      index = int(pdu[10:][:2], 16)
+      pos = int(pdu[10:][:2], 16)
     
       pdu = pdu[12:]
 
-      s = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', pdu))
-      content = "[%d/%d] <%s>: %s" % (index, total, group, s)
+      content = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', pdu))
     elif pdu[:6] == '060504':
       content = '(MMS)'
     else:
       content = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', pdu))
 
-    return content
+    return pos, total, mark, content
  
   def read_sms_text(self, index):
     self.set_cmgf(1)
@@ -128,7 +131,7 @@ class SmsCat:
       
       d['id'] = index
       d['send_on'] = datetime.strptime(d['send_on'][:-3], '%y/%m/%d,%H:%M:%S')
-      d['content'] = self.decode_pdu(recv[1])
+      d['pos'], d['len'], d['label'], d['content'] = self.decode_pdu(content)
       return d
 
   def decode_pdu_full(self, pdu):
@@ -146,9 +149,9 @@ class SmsCat:
     d['send_on'] = datetime.strptime(SmsCat.ucs2(pdu[center_length + source_length + 12:][:12]), '%y%m%d%H%M%S')
 
     content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) * 2:]
-    
+    d['pos'], d['len'], d['label'] = 1, 1, '00' 
     if encoding == '08':
-      d['content'] = self.decode_pdu(content)
+      d['pos'], d['len'], d['label'], d['content'] = self.decode_pdu(content)
     elif encoding == '00':
       content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) / 8 * 7 * 2:]
       s = ''.join((re.findall(r'..', content)[::-1]))
