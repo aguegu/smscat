@@ -98,21 +98,29 @@ class SmsCat:
     self.sp.flush()
     return self.getResponse()
 
+  def decode_pdu(self, pdu, d):
+    d['pdu'] = pdu
+    if d['pdu'][:6] == '050003':
+      d['group'] = d['pdu'][6:][:2]
+      d['total'] = int(d['pdu'][8:][:2], 16)
+      d['index'] = int(d['pdu'][10:][:2], 16)
+    
+      d['pdu'] = d['pdu'][12:]
+
+      s = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', d['pdu']))
+      d['content'] = "[%d/%d] <%s>: %s" % (d['index'], d['total'], d['group'], s)
+    elif d['pdu'][:6] == '060504':
+      d['content'] = '(MMS)'
+    else:
+      d['content'] = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', d['pdu']))
+ 
   def read_sms_text(self, index):
     self.set_cmgf(1)
     recv = self.transmit("AT+CMGR=%d" % index)
     if len(recv) and recv[0].find('"') != -1:
       d = dict(zip(['status', 'source', 'sent_on'], re.findall(r'\"([^\"]+)\"', recv[0])))
-      d['pdu'] = recv[1]
-
-      index = int(d['pdu'][:2], 16)
-      
-      if index == 5 or index == 6:
-        print re.findall('..', d['pdu'][:index * 2 + 2])
-        d['pdu'] = d['pdu'][index * 2 + 2:]
-
-      d['content'] = ''.join(unichr(int(c, 16)) for c in re.findall('....', d['pdu']))
-
+      self.decode_pdu(recv[1], d)
+       
       print d['content']
 
   def read_sms_pdu(self, index):
@@ -134,7 +142,7 @@ class SmsCat:
     content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) * 2:]
     
     if d['encoding'] == '08':
-      d['content'] = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', content))
+      self.decode_pdu(content, d)
     elif d['encoding'] == '00':
       content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) / 8 * 7 * 2:]
       s = ''.join((re.findall(r'..', content)[::-1]))
@@ -149,7 +157,6 @@ class SmsCat:
     elif d['encoding'] == '04':
       d['content'] = '(MMS)'
 
-    print d
     print d['content']
 
 if __name__ == '__main__':
@@ -160,6 +167,6 @@ if __name__ == '__main__':
   
   for i in range(1, 40):
     sms.read_sms_pdu(i)
-#    #sms.read_sms_text(i)
-#
+    sms.read_sms_text(i)
+
   sms.close()
