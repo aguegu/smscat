@@ -5,8 +5,9 @@ import time
 import re
 import logging
 from datetime import datetime
+import json
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 class SmsCat:
   def __init__(self, port):
@@ -131,18 +132,9 @@ class SmsCat:
       d['content'] = self.decode_pdu(recv[1])
       return d
 
-  def read_sms_pdu(self, index):
-    self.set_cmgf(0)
-
-    recv = self.transmit("AT+CMGR=%d" % index)
-    if len(recv) != 3:
-      return
-
+  def decode_pdu_full(self, pdu):
     d = {}
-    pdu = recv[1]
-    
     center_length = int(pdu[:2], 16) * 2
-    d['id'] = index
 #    d['center'] = SmsCat.ucs2(pdu[4:(center_length + 2)])[:-1]
     source_length =(int(pdu[center_length + 4:][:2], 16) + 1) / 2 * 2
     d['source'] = SmsCat.ucs2(pdu[center_length + 8:][:source_length])
@@ -165,12 +157,34 @@ class SmsCat:
         c = chr(n & 0x7f)
         n >>= 7
         r += c
- 
-      d['content'] = r  
+      d['content'] = unicode(r)
     elif encoding == '04':
-      d['content'] = '(MMS)'
+      d['content'] = u'(MMS)'
 
     return d
+
+  def read_sms_pdu(self, index):
+    self.set_cmgf(0)
+
+    recv = self.transmit("AT+CMGR=%d" % index)
+    if len(recv) != 3:
+      return
+
+    d = self.decode_pdu_full(recv[1])
+    d['id'] = index
+    return d
+
+  def read_sms_list(self):
+    self.set_cmgf(0)
+    l = self.transmit('AT+CMGL=4')
+    if len(l) % 2 == 1 and l[-1] == 'OK':
+      l = zip(l[::2], l[1::2])
+      ll = []
+      for m in l:
+        d = self.decode_pdu_full(m[1])
+        d['index'] = int(re.findall(r': (\d+),', m[0])[0])
+        ll.append(d)
+    return ll  
 
 if __name__ == '__main__':
   sms = SmsCat('/dev/ttyS0')
@@ -178,9 +192,6 @@ if __name__ == '__main__':
 #  sms.send_sms_pdu("13665036099", u'使用8字节国内短信中心发送到8位国际号码')
 #  sms.transmit('AT+IPR')
   
-  for i in range(25, 30):
-    d = sms.read_sms_pdu(i)
-    print d['content']
-    print sms.read_sms_text(i)
+  print json.dumps(sms.read_sms_list())
 
   sms.close()
