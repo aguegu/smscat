@@ -5,7 +5,6 @@ import time
 import re
 import logging
 from datetime import datetime
-import json
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -140,6 +139,8 @@ class SmsCat:
     d['source'] = SmsCat.ucs2(pdu[center_length + 8:][:source_length])
     if d['source'][:2] == '86':
       d['source'] = d['source'][2:]
+    if d['source'][-1] == 'F':
+      d['source'] = d['source'][:-1]
     
     encoding = pdu[center_length + 10 + source_length:][:2]
     d['send_on'] = datetime.strptime(SmsCat.ucs2(pdu[center_length + source_length + 12:][:12]), '%y%m%d%H%M%S')
@@ -192,6 +193,6 @@ if __name__ == '__main__':
 #  sms.send_sms_pdu("13665036099", u'使用8字节国内短信中心发送到8位国际号码')
 #  sms.transmit('AT+IPR')
   
-  print json.dumps(sms.read_sms_list())
+  print sms.read_sms_list()
 
   sms.close()
