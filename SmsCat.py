@@ -6,7 +6,7 @@ import re
 import logging
 from datetime import datetime
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 class SmsCat:
   def __init__(self, port):
@@ -155,6 +155,9 @@ class SmsCat:
       d['pos'], d['len'], d['label'], d['content'] = self.decode_pdu(content)
       return d
 
+  def delete_sms(self, index):
+    self.transmit('AT+CMGD=%d' % index)
+
   def decode_pdu_full(self, pdu):
     d = {}
     center_length = int(pdu[:2], 16) * 2
@@ -217,6 +220,9 @@ if __name__ == '__main__':
 #  sms.send_sms_pdu("13665036099", u'使用8字节国内短信中心发送到8位国际号码')
 #  sms.transmit('AT+IPR')
   
-  print sms.read_sms_list()
+  sms.delete_sms(32)
+  l = sms.read_sms_list()
+  for m in l:
+    print "%d: %s" % (m['index'], m['content'])
 
   sms.close()

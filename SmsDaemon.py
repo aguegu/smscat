@@ -54,8 +54,7 @@ class SmsDaemon(Thread):
         conn.commit()
         cursor.close()
         conn.commit()
-      else:
-        time.sleep(10)
+      time.sleep(10)
 
 if __name__ == '__main__':
   sd = SmsDaemon('/dev/ttyS0', '18805900896')
