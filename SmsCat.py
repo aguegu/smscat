@@ -19,7 +19,7 @@ class SmsCat:
     self.sp.timeout = 2
 
     assert not self.sp.isOpen()
-    
+
     self.sp.open()
     while True:
       r = self.transmit('AT')
@@ -33,7 +33,7 @@ class SmsCat:
       exit(1)
     else:
       logging.info('SMS center: %s' % r[0])
-     
+
     r = self.transmit('AT+CMGF?')
     self.cmgf = int(r[0][-1])
 
@@ -53,7 +53,7 @@ class SmsCat:
         if s:
           logging.info('< %s' % s)
           recv.append(s)
-          if s == 'OK': 
+          if s == 'OK':
             break
           elif s == 'ERROR':
             logging.warning('ERROR in reply.')
@@ -66,9 +66,9 @@ class SmsCat:
       except serial.serialutil.SerialException, e:
         logging.error(e)
         exit(1)
- 
+
     return recv
-  
+
   def transmit(self, content):
     logging.info('> %s' % content)
     self.sp.write(content + '\r')
@@ -98,16 +98,16 @@ class SmsCat:
       s += 'F'
     s = '86' + s
     return cls.ucs2(s)
-  
+
   @staticmethod
   def msg(s):
     assert type(s) is unicode
     s = ''.join('{:04X}'.format(ord(c)) for c in s)
-    return '{:02x}'.format(len(s) / 2) + s 
+    return '{:02x}'.format(len(s) / 2) + s
 
   def send_sms_pdu(self, phone_number, text):
     self.set_cmgf(0)
-#    header = "00"      # use the on sim sms center 
+#    header = "00"      # use the on sim sms center
     header = '0891{0}'.format(SmsCat.ucs2_phone('13800591500'))
 #    header = '07A1{0}'.format(SmsCat.ucs2('13800591500F'))
     pdu = "11000D91{0}000800{1}".format(SmsCat.ucs2_phone(phone_number), SmsCat.msg(text))
@@ -121,15 +121,15 @@ class SmsCat:
     return self.getResponse()
 
   def decode_pdu(self, pdu):
-    mark = '00'
+    mark = 0
     total = 1
     pos = 1
 
     if pdu[:6] == '050003':
-      mark = pdu[6:][:2]
+      mark = int(pdu[6:][:2], 16)
       total = int(pdu[8:][:2], 16)
       pos = int(pdu[10:][:2], 16)
-    
+
       pdu = pdu[12:]
 
       content = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', pdu))
@@ -139,7 +139,7 @@ class SmsCat:
       content = ''.join(unichr(int(c, 16)) for c in re.findall(r'....', pdu))
 
     return pos, total, mark, content
- 
+
   def read_sms_text(self, index):
     self.set_cmgf(1)
     recv = self.transmit("AT+CMGR=%d" % index)
@@ -149,10 +149,10 @@ class SmsCat:
         d['source'] = d['source'][3:]
       if d['source'][-1] == 'F':
         d['source'] = d['source'][:-1]
-      
+
       d['id'] = index
       d['send_on'] = datetime.strptime(d['send_on'][:-3], '%y/%m/%d,%H:%M:%S')
-      d['pos'], d['len'], d['label'], d['content'] = self.decode_pdu(content)
+      d['segment_pos'], d['segment_count'], d['mark'], d['content'] = self.decode_pdu(content)
       return d
 
   def delete_sms(self, index):
@@ -168,14 +168,14 @@ class SmsCat:
       d['source'] = d['source'][2:]
     if d['source'][-1] == 'F':
       d['source'] = d['source'][:-1]
-    
+
     encoding = pdu[center_length + 10 + source_length:][:2]
     d['send_on'] = datetime.strptime(SmsCat.ucs2(pdu[center_length + source_length + 12:][:12]), '%y%m%d%H%M%S')
 
     content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) * 2:]
-    d['pos'], d['len'], d['label'] = 1, 1, '00' 
+    d['segment_pos'], d['segment_count'], d['mark'] = 1, 1, '00'
     if encoding == '08':
-      d['pos'], d['len'], d['label'], d['content'] = self.decode_pdu(content)
+      d['segment_pos'], d['segment_count'], d['mark'], d['content'] = self.decode_pdu(content)
     elif encoding == '00':
       content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) / 8 * 7 * 2:]
       s = ''.join((re.findall(r'..', content)[::-1]))
@@ -211,18 +211,19 @@ class SmsCat:
       for m in l:
         d = self.decode_pdu_full(m[1])
         d['index'] = int(re.findall(r': (\d+),', m[0])[0])
+        d['receive_on'] = datetime.now()
         ll.append(d)
-      return ll  
+      return ll
 
 if __name__ == '__main__':
   sms = SmsCat('/dev/ttyS0')
 #  sms.send_sms_text('13665036099', 'hello, world, again.')
 #  sms.send_sms_pdu("13665036099", u'使用8字节国内短信中心发送到8位国际号码')
 #  sms.transmit('AT+IPR')
-  
+
   sms.delete_sms(32)
   l = sms.read_sms_list()
   for m in l:
-    print "%d: %s" % (m['index'], m['content'])
+    print "%s %s %d: %s" % (m['send_on'], m['source'], m['index'], m['content'])
 
   sms.close()
