@@ -31,16 +31,17 @@ cursor.executescript("""
 
   
 conn.commit()
-cursor.executemany("""
-  INSERT INTO SMS (
-              Send_On, 
-              Source, 
-              Content,
-              label,
-              Pos,
-              Len)
-  VALUES (:send_on, :source, :content, :label, :pos, :len)
-""", l)
+if l:
+  cursor.executemany("""
+    INSERT INTO SMS (
+                Send_On, 
+                Source, 
+                Content,
+                label,
+                Pos,
+                Len)
+    VALUES (:send_on, :source, :content, :label, :pos, :len)
+  """, l)
 
 conn.commit()
 cursor.close()

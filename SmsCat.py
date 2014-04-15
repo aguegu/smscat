@@ -25,7 +25,15 @@ class SmsCat:
       r = self.transmit('AT')
       if len(r) == 1 and r[0] == 'OK':
         break
-   
+
+    time.sleep(2)
+    r = self.transmit('AT+CSCA?')
+    if r[0] == 'ERROR':
+      logging.error('ERROR in reading sms center. Please check the SIM installation.')
+      exit(1)
+    else:
+      logging.info('SMS center: %s' % r[0])
+     
     r = self.transmit('AT+CMGF?')
     self.cmgf = int(r[0][-1])
 
@@ -38,14 +46,27 @@ class SmsCat:
 
   def getResponse(self):
     recv = []
+    i = 0
     while True:
-      s = self.sp.readline().strip()
-      if s:
-        logging.info('< %s' % s)
-        recv.append(s)
-        if s == 'OK' or s == 'ERROR':
+      try:
+        s = self.sp.readline().strip()
+        if s:
+          logging.info('< %s' % s)
+          recv.append(s)
+          if s == 'OK': 
+            break
+          elif s == 'ERROR':
+            logging.warning('ERROR in reply.')
+            break
+        else:
+          i += 1
+        if i > 3:
+          logging.warning('No reply in 6 sec.')
           break
-
+      except serial.serialutil.SerialException, e:
+        logging.error(e)
+        exit(1)
+ 
     return recv
   
   def transmit(self, content):
@@ -188,7 +209,7 @@ class SmsCat:
         d = self.decode_pdu_full(m[1])
         d['index'] = int(re.findall(r': (\d+),', m[0])[0])
         ll.append(d)
-    return ll  
+      return ll  
 
 if __name__ == '__main__':
   sms = SmsCat('/dev/ttyS0')
