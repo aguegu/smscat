@@ -6,7 +6,7 @@ import re
 import logging
 from datetime import datetime
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 class SmsCat:
   def __init__(self, port):
