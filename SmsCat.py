@@ -6,7 +6,7 @@ import re
 import logging
 from datetime import datetime
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 class SmsCat:
   def __init__(self, port):
@@ -123,12 +123,12 @@ class SmsCat:
   def decode_pdu(self, pdu):
     mark = 0
     total = 1
-    pos = 1
+    pos = 0
 
     if pdu[:6] == '050003':
       mark = int(pdu[6:][:2], 16)
       total = int(pdu[8:][:2], 16)
-      pos = int(pdu[10:][:2], 16)
+      pos = int(pdu[10:][:2], 16) - 1
 
       pdu = pdu[12:]
 
@@ -173,7 +173,7 @@ class SmsCat:
     d['send_on'] = datetime.strptime(SmsCat.ucs2(pdu[center_length + source_length + 12:][:12]), '%y%m%d%H%M%S')
 
     content = pdu[-int(pdu[center_length + source_length + 26:][:2], 16) * 2:]
-    d['segment_pos'], d['segment_count'], d['mark'] = 1, 1, '00'
+    d['segment_pos'], d['segment_count'], d['mark'] = 0, 1, '00'
     if encoding == '08':
       d['segment_pos'], d['segment_count'], d['mark'], d['content'] = self.decode_pdu(content)
     elif encoding == '00':
