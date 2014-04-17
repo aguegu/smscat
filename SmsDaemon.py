@@ -83,14 +83,13 @@ class SmsDaemon(Thread):
             logging.error("could not access server.")
             exit(1)
 
-      if self.run_once:
-        break
-
-      if isinstance(ll, list):
         if len(ll) >= size * 3 / 4 and span_index in range(1, len(spans)):
           span_index -= 1
         elif len(ll) < size / 4 and span_index in range(0, len(spans) - 1):
           span_index += 1
+
+      if self.run_once:
+        break
 
       time.sleep(spans[span_index])
 
