@@ -36,6 +36,8 @@ class SmsCat:
 
     r = self.transmit('AT+CMGF?')
     self.cmgf = int(r[0][-1])
+  
+    self.transmit('AT+CPMS=SM')
 
   # 0: PDU; 1: TEXT
   def set_cmgf(self, cmgf):

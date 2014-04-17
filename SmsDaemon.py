@@ -86,10 +86,11 @@ class SmsDaemon(Thread):
       if self.run_once:
         break
 
-      if len(ll) >= size * 3 / 4 and span_index in range(1, len(spans)):
-        span_index -= 1
-      elif len(ll) < size / 4 and span_index in range(0, len(spans) - 1):
-        span_index += 1
+      if isinstance(ll, list):
+        if len(ll) >= size * 3 / 4 and span_index in range(1, len(spans)):
+          span_index -= 1
+        elif len(ll) < size / 4 and span_index in range(0, len(spans) - 1):
+          span_index += 1
 
       time.sleep(spans[span_index])
 
