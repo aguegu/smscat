@@ -43,6 +43,10 @@ class SmsCat:
     if cmgf != self.cmgf:
       sms.transmit('AT+CMGF=%d' % cmgf)
       self.cmgf = cmgf
+  
+  def getSimSize(self):
+    r = self.transmit('AT+CPMS?')
+    return int(r[0].split(',')[2])
 
   def getResponse(self):
     recv = []

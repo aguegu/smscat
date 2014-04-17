@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
-from SmsCat import SmsCat
+from SmsCat import SmsCat, logging
 from datetime import datetime
 import time
 from threading import Thread
 import json
 import requests
+from datetime import datetime
 
 url = 'http://localhost:5000/api/inbox'
 headers = {'content-type': 'application/json'}
@@ -43,7 +44,11 @@ class SmsDaemon(Thread):
     conn.close()
 
   def run(self):
+    spans = [0, 2, 4, 8, 16]
+    span_index = 0
+    size = self.cat.getSimSize()
     while True:
+      logging.info(datetime.now().isoformat())
       ll =  self.cat.read_sms_list()
       if ll:
         conn = sqlite3.connect(self.db)
@@ -70,12 +75,23 @@ class SmsDaemon(Thread):
           l['destination'] = self.sn
           i = l['index']
           del(l['index'])
-          r = requests.post(url, data=json.dumps(l), headers=headers)
-          if self.delete and r.status_code == 200:
-            self.cat.delete_sms(i)
+          try:
+            r = requests.post(url, data=json.dumps(l), headers=headers)
+            if self.delete and r.status_code == 200:
+              self.cat.delete_sms(i)
+          except requests.ConnectionError:
+            logging.error("could not access server.")
+            exit(1)
+
       if self.run_once:
         break
-      time.sleep(10)
+
+      if len(ll) >= size * 3 / 4 and span_index in range(1, len(spans)):
+        span_index -= 1
+      elif len(ll) < size / 4 and span_index in range(0, len(spans) - 1):
+        span_index += 1
+
+      time.sleep(spans[span_index])
 
 if __name__ == '__main__':
   sd = SmsDaemon('/dev/ttyS0', '18805900896', False, True)
