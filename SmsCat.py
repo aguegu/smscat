@@ -36,7 +36,7 @@ class SmsCat:
 
     r = self.transmit('AT+CMGF?')
     self.cmgf = int(r[0][-1])
-  
+
     self.transmit('AT+CPMS=SM')
 
   # 0: PDU; 1: TEXT
@@ -45,7 +45,7 @@ class SmsCat:
     if cmgf != self.cmgf:
       sms.transmit('AT+CMGF=%d' % cmgf)
       self.cmgf = cmgf
-  
+
   def getSimSize(self):
     r = self.transmit('AT+CPMS?')
     return int(r[0].split(',')[2])
@@ -64,10 +64,12 @@ class SmsCat:
           elif s == 'ERROR':
             logging.warning('ERROR in reply.')
             break
+          elif s == '>':
+            break
         else:
           i += 1
-        if i > 3:
-          logging.warning('No reply in 6 sec.')
+        if i > 5:
+          logging.warning('No reply in 10 sec.')
           break
       except serial.serialutil.SerialException, e:
         logging.error(e)
@@ -75,21 +77,16 @@ class SmsCat:
 
     return recv
 
-  def transmit(self, content):
+  def transmit(self, content, ending = '\r'):
     logging.info('> %s' % content)
-    self.sp.write(content + '\r')
+    self.sp.write(content + ending)
     self.sp.flush()
     return self.getResponse()
 
   def send_sms_text(self, phone_number, text):
     self.set_cmgf(1)
-    self.sp.write("AT+CMGS=%s\r" % phone_number)
-    self.sp.flush()
-    self.sp.read(4)
-    self.sp.write(text)
-    self.sp.write('%c' % 0x1a)
-    self.sp.flush()
-    return self.getResponse()
+    self.transmit("AT+CMGS=%s" % phone_number)
+    self.transmit(text, '\x1a')
 
   def close(self):
     self.sp.close()
@@ -113,18 +110,20 @@ class SmsCat:
 
   def send_sms_pdu(self, phone_number, text):
     self.set_cmgf(0)
-#    header = "00"      # use the on sim sms center
-    header = '0891{0}'.format(SmsCat.ucs2_phone('13800591500'))
+    header = "00"      # use the on sim sms center
+#    header = '0891{0}'.format(SmsCat.ucs2_phone('13800591500'))
 #    header = '07A1{0}'.format(SmsCat.ucs2('13800591500F'))
     pdu = "11000D91{0}000800{1}".format(SmsCat.ucs2_phone(phone_number), SmsCat.msg(text))
-    logging.info('%d %s' % (len(pdu) / 2, header + pdu))
-    self.sp.write("AT+CMGS=%02d\r" % (len(pdu) / 2))
-    self.sp.flush()
-    self.sp.readline()
-    self.sp.write(header + pdu)
-    self.sp.write('%c' % 0x1a)
-    self.sp.flush()
-    return self.getResponse()
+    self.transmit("AT+CMGS=%02d" % (len(pdu) / 2))
+    self.transmit(header + pdu, '\x1a')
+
+  def send_sms(self, phone_number, text):
+    assert isinstance(text, unicode)
+    try:
+      text = text.encode('ascii')    
+      self.send_sms_text(phone_number, text)
+    except UnicodeEncodeError:    
+      self.send_sms_pdu(phone_number, text)
 
   def decode_pdu(self, pdu):
     mark = 0
@@ -223,13 +222,16 @@ class SmsCat:
 
 if __name__ == '__main__':
   sms = SmsCat('/dev/ttyS0')
-#  sms.send_sms_text('13665036099', 'hello, world, again.')
+  sms.send_sms('13665036099', u'hello, world, again.' + unicode(datetime.now().isoformat()))
+  sms.send_sms('13665036099', u'你好, 世界啊～' + unicode(datetime.now().isoformat()))
+  sms.send_sms('13665036099', u'你好, 世界啊～' + unicode(datetime.now().isoformat()))
+  sms.send_sms('13665036099', u'hello, world, again.' + unicode(datetime.now().isoformat()))
 #  sms.send_sms_pdu("13665036099", u'使用8字节国内短信中心发送到8位国际号码')
 #  sms.transmit('AT+IPR')
 
-  sms.delete_sms(32)
-  l = sms.read_sms_list()
-  for m in l:
-    print "%s %s %d: %s" % (m['send_on'], m['source'], m['index'], m['content'])
-
+#  sms.delete_sms(32)
+#  l = sms.read_sms_list()
+#  for m in l:
+#    print "%s %s %d: %s" % (m['send_on'], m['source'], m['index'], m['content'])
+#
   sms.close()
