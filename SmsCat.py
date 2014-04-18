@@ -43,7 +43,7 @@ class SmsCat:
   def set_cmgf(self, cmgf):
     assert cmgf in (0, 1)
     if cmgf != self.cmgf:
-      sms.transmit('AT+CMGF=%d' % cmgf)
+      self.transmit('AT+CMGF=%d' % cmgf)
       self.cmgf = cmgf
 
   def getSimSize(self):

@@ -27,17 +27,17 @@ class SmsDaemon(Thread):
 
     cursor.executescript("""
       DROP TABLE IF EXISTS INBOX;
-      CREATE TABLE IF NOT EXISTS INBOX(
-        Id INTEGER PRIMARY KEY,
-        Source TEXT NOT NULL,
-        Destination TEXT NOT NULL,
-        Content TEXT NOT NULL,
-        Mark TEXT,
-        SegmentPos Integer NOT NULL,
-        SegmentCount Integer NOT NULL,
-        SendOn Datetime NOT NULL,
-        ReceiveOn Datetime NOT NULL
-      );
+      CREATE  TABLE IF NOT EXISTS INBOX(
+              Id INTEGER PRIMARY KEY,
+              Source TEXT NOT NULL,
+              Destination TEXT NOT NULL,
+              Content TEXT NOT NULL,
+              Mark TEXT,
+              SegmentPos Integer NOT NULL,
+              SegmentCount Integer NOT NULL,
+              SendOn Datetime NOT NULL,
+              ReceiveOn Datetime NOT NULL
+        );
     """)
     conn.commit()
     cursor.close()
@@ -83,11 +83,18 @@ class SmsDaemon(Thread):
             logging.error("could not access server.")
             exit(1)
 
-        if len(ll) >= size * 3 / 4 and span_index in range(1, len(spans)):
-          span_index -= 1
-        elif len(ll) < size / 4 and span_index in range(0, len(spans) - 1):
-          span_index += 1
+      r = requests.put('http://localhost:5000/api/outbox?source=%s&action=assign' % self.sn) 
+      if r.status_code == 200:
+        d = r.json()
+        self.cat.send_sms(d['destination'], d['content'])
+        r = requests.put('http://localhost:5000/api/outbox?id=%d&action=send' % d["id"])
+        assert r.status_code == 200
 
+      if len(ll) > size * 3 / 4 and span_index in range(1, len(spans)):
+        span_index -= 1
+      elif len(ll) < size / 4 and span_index in range(0, len(spans) - 1):
+        span_index += 1
+    
       if self.run_once:
         break
 
