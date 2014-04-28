@@ -9,7 +9,9 @@ import json
 import requests
 from datetime import datetime
 
-url = 'http://localhost:5000/api/inbox-message'
+inbox_url = 'http://localhost:5000/api/inbox'
+outbox_url = 'http://localhost:5000/api/outbox'
+
 headers = {'content-type': 'application/json'}
 
 class SmsDaemon(Thread):
@@ -76,7 +78,7 @@ class SmsDaemon(Thread):
           i = l['index']
           del(l['index'])
           try:
-            r = requests.post(url, data=json.dumps(l), headers=headers)
+            r = requests.post(inbox_url, data=json.dumps(l), headers=headers)
             print l
             if self.delete and r.status_code == 200:
               self.cat.delete_sms(i)
@@ -84,11 +86,11 @@ class SmsDaemon(Thread):
             logging.error("could not access server.")
             exit(1)
 
-      r = requests.put('http://localhost:5000/api/outbox-message?source=%s&action=assign' % self.sn) 
+      r = requests.put(outbox_url + '?source=%s&action=assign' % self.sn) 
       if r.status_code == 200:
         d = r.json()
         self.cat.send_sms(d['destination'], d['content'])
-        r = requests.put('http://localhost:5000/api/outbox-message?id=%d&action=send' % d["id"])
+        r = requests.put(outbox_url + '?id=%d&action=send' % d["id"])
         assert r.status_code == 200
 
       if len(ll) > size * 3 / 4 and span_index in range(1, len(spans)):
