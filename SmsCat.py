@@ -210,10 +210,9 @@ class SmsCat:
   def read_sms_list(self):
     self.set_cmgf(0)
     l = self.transmit('AT+CMGL=4')
-    if len(l) % 2 == 1 and l[-1] == 'OK':
-      l = zip(l[::2], l[1::2])
+    if len(l) % 2 == 1 and l[-1] == 'OK':      
       ll = []
-      for m in l:
+      for m in zip(l[::2], l[1::2]):
         d = self.decode_pdu_full(m[1])
         d['index'] = int(re.findall(r': (\d+),', m[0])[0])
         d['receive_on'] = datetime.now()
